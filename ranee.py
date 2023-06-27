@@ -209,3 +209,87 @@ country = country[['한글 국가명','국내총생산(GDP)','1인당 총생산(
 country['국가명'] = country['한글 국가명']
 
 
+# 국가를 cluster 하여 각 군집을 대표하는 나라 뽑기
+
+import pandas as pd
+df1= pd.read_csv(r'C:\ITWILL\trade_project\data\country_2022.csv' , encoding='utf-8')
+df1.head()
+
+df2 = pd.read_csv(r'C:\ITWILL\trade_project\data\GDP.csv' , encoding='utf-8')
+df2.head()
+
+merged_df = pd.merge(df1, df2, on='국가명')
+merged_df.head()
+merged_df.to_csv(r'C:\ITWILL\trade_project\data\최종나라목록_2022.csv', encoding='ANSI')
+
+# 필요한 패키지 불러오기
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+from sklearn import preprocessing
+
+# 원본 데이터를 복사해서 전처리하기 (원본 데이터를 가지고 바로 전처리하지 않는다)
+processed_data = merged_df.copy()
+processed_data.info()
+
+processed_data['수출건수'] = pd.to_numeric(processed_data['수출건수'].str.replace(',', ''), errors='coerce')
+processed_data['수출금액'] = pd.to_numeric(processed_data['수출금액'].str.replace(',', ''), errors='coerce')
+processed_data['수입건수'] = pd.to_numeric(processed_data['수입건수'].str.replace(',', ''), errors='coerce')
+processed_data['수입금액'] = pd.to_numeric(processed_data['수입금액'].str.replace(',', ''), errors='coerce')
+processed_data['무역수지'] = pd.to_numeric(processed_data['무역수지'].str.replace(',', ''), errors='coerce')
+
+processed_data = convert_to_numeric(processed_data)
+
+# 데이터 전처리 - 정규화를 위한 작업
+scaler = preprocessing.MinMaxScaler()
+processed_data[['수출건수', '수출금액','수입건수','수입금액','무역수지','국내총생산','1인당 총생산']] = scaler.fit_transform(processed_data[['수출건수', '수출금액','수입건수','수입금액','무역수지','국내총생산','1인당 총생산']])
+
+processed_data.head()
+processed_data.describe()
+processed_data.isnull()
+processed_data = processed_data.dropna()
+
+# 화면(figure) 생성
+plt.figure(figsize = (10, 6))
+
+# K = 3으로 클러스터링
+estimator = KMeans(n_clusters = 3)
+
+# 클러스터링 생성
+cluster = estimator.fit_predict(processed_data[['수출건수','수출금액','수입건수','수입금액','무역수지','국내총생산','1인당 총생산']])
+
+
+
+# 데이터 축소
+from sklearn.decomposition import PCA
+pca = PCA(n_components=2)
+reduced_data = pca.fit_transform(processed_data[['수출건수', '수출금액', '수입건수', '수입금액', '무역수지', '국내총생산', '1인당 총생산']])
+
+# 군집 결과 시각화
+cluster_labels = estimator.labels_
+
+fig, ax = plt.subplots()
+scatter = ax.scatter(reduced_data[:, 0], reduced_data[:, 1], c=cluster_labels)
+
+# 국가명 표시
+for i, txt in enumerate(processed_data['국가명']):
+    ax.annotate(txt, (reduced_data[i, 0], reduced_data[i, 1]))
+
+plt.xlabel('PC1')
+plt.ylabel('국가명')
+plt.title('Clustering Result')
+plt.show()
+
+
+
+
+
+# 새 코드를 짜보아요....
+
+features = processed_data.drop('국가명', axis=1)
+
+kmeans = KMeans(n_clusters=3)
+kmeans.fit(features)
+processed_data['군집'] = kmeans.labels_
+processed_data.info()
+grouped = processed_data.groupby('군집')
+processed_data['군집'].value_counts()
