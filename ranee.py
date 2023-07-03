@@ -220,7 +220,7 @@ df2.head()
 
 merged_df = pd.merge(df1, df2, on='국가명')
 merged_df.head()
-merged_df.to_csv(r'C:\ITWILL\trade_project\data\최종나라목록_2022.csv', encoding='ANSI')
+merged_df.to_csv(r'C:\ITWILL\trade_project\data\최종나라목록_2022.csv', encoding='ANSI', index=False)
 
 # 필요한 패키지 불러오기
 from sklearn.cluster import KMeans
@@ -231,22 +231,25 @@ from sklearn import preprocessing
 processed_data = merged_df.copy()
 processed_data.info()
 
+'''
 processed_data['수출건수'] = pd.to_numeric(processed_data['수출건수'].str.replace(',', ''), errors='coerce')
 processed_data['수출금액'] = pd.to_numeric(processed_data['수출금액'].str.replace(',', ''), errors='coerce')
 processed_data['수입건수'] = pd.to_numeric(processed_data['수입건수'].str.replace(',', ''), errors='coerce')
 processed_data['수입금액'] = pd.to_numeric(processed_data['수입금액'].str.replace(',', ''), errors='coerce')
 processed_data['무역수지'] = pd.to_numeric(processed_data['무역수지'].str.replace(',', ''), errors='coerce')
+'''
 
 processed_data = convert_to_numeric(processed_data)
+
+# null값 처리
+processed_data.isnull()
+processed_data = processed_data.dropna()
+
 
 # 데이터 전처리 - 정규화를 위한 작업
 scaler = preprocessing.MinMaxScaler()
 processed_data[['수출건수', '수출금액','수입건수','수입금액','무역수지','국내총생산','1인당 총생산']] = scaler.fit_transform(processed_data[['수출건수', '수출금액','수입건수','수입금액','무역수지','국내총생산','1인당 총생산']])
 
-processed_data.head()
-processed_data.describe()
-processed_data.isnull()
-processed_data = processed_data.dropna()
 
 # 화면(figure) 생성
 plt.figure(figsize = (10, 6))
@@ -257,39 +260,142 @@ estimator = KMeans(n_clusters = 3)
 # 클러스터링 생성
 cluster = estimator.fit_predict(processed_data[['수출건수','수출금액','수입건수','수입금액','무역수지','국내총생산','1인당 총생산']])
 
+# 군집이 균형적으로 안됨ㅠ
+# 4쿼터..뭐냐 이거 무튼 이거해서 해보자
+qt = QuantileTransformer()
+cc_scaled = qt.fit_transform(sc)
+
+# 클러스터링
+kmeans = KMeans(n_clusters=3, random_state=10)
+clusters = kmeans.fit(cc_scaled)
+
+# 군집 결과를 원본 데이터에 추가
+cc['cluster'] = clusters.labels_
 
 
-# 데이터 축소
-from sklearn.decomposition import PCA
-pca = PCA(n_components=2)
-reduced_data = pca.fit_transform(processed_data[['수출건수', '수출금액', '수입건수', '수입금액', '무역수지', '국내총생산', '1인당 총생산']])
+# 계층적 군집 분석
 
-# 군집 결과 시각화
-cluster_labels = estimator.labels_
+# 필요한 라이브러리 다운
+from sklearn.datasets import load_iris # dataset
+import pandas as pd # DataFrame
+from scipy.cluster.hierarchy import linkage, dendrogram # 군집분석 tool
+import matplotlib.pyplot as plt # 산점도 시각화 
+import pandas as pd 
 
-fig, ax = plt.subplots()
-scatter = ax.scatter(reduced_data[:, 0], reduced_data[:, 1], c=cluster_labels)
+df3 = pd.read_csv(r'C:\ITWILL\trade_project\data\최종나라목록_2022.csv', encoding='ANSI')
+print(df3)
 
-# 국가명 표시
-for i, txt in enumerate(processed_data['국가명']):
-    ax.annotate(txt, (reduced_data[i, 0], reduced_data[i, 1]))
+# 데이터전처리 (결측치제거, 정규화)
+df3.isnull().sum() # 1인당 총생산에 2개 결측치
+df3 = df3.dropna() 
+df3.isnull().sum()
+df3.info()
 
-plt.xlabel('PC1')
-plt.ylabel('국가명')
-plt.title('Clustering Result')
-plt.show()
+df3_2 = df3[df3.columns.difference(['국가명'])] # 국가명을 제외한 열들로 구성
+df3_3 = df3.drop(['국가명'], axis=1)
+
+df3_3 = df3_3.replace(',', '', regex=True).astype(float) #쉼표제거, float형으로 변환
+df3_3.corr(method='pearson')
+
+
+scaler = preprocessing.MinMaxScaler()
+df3_3 = scaler.fit_transform(df3_3)
+
+clusters = linkage(df3_3, method='average') # 방법 세가지 있는데 
+print(clusters)
+
+# 4. 클러스터링 자르기
+from scipy.cluster.hierarchy import fcluster # 클러스터 자르기 도구 
+import numpy as np # 클러스터 빈도수 
+
+# 클러스터 자르기
+cut_cluster = fcluster(clusters, t=9, criterion='maxclust')
+
+# 클러스터 빈도수
+unique, counts = np.unique(cut_cluster, return_counts=True)
+print(unique, counts) # [1 2 3] [140   1   1] 
+
+df3['cluster'] = cut_cluster
+df3
+
+plt.figure(figsize = (25, 10))
+dendrogram(cut_cluster)
+plt.show() # 군집수 3개 결정
 
 
 
+# 새로운 변수를 추가해서 군집분석 하기 (환율,대출금리)
+
+df4 = pd.read_csv(r'C:\ITWILL\trade_project\data\환율.csv', encoding='ANSI')
+df5 = pd.read_csv(r'C:\ITWILL\trade_project\data\국제금리.csv', encoding='ANSI')
+df4.info()
+df5.info()
+country_name = []
+for i in df4['국가(통화단위)별'] :
+    a = i.split('(')
+    country_name.append(a[0])
+
+df4['국가명'] = country_name
+df4['환율'] = df4['2021']
+df4 = df4[['국가명','환율']]
+df5['국가명'] = df5['국가별']
+df5['대출금리'] = df5['2021.2']
+df5 = df5[['대출금리','국가명']]
 
 
-# 새 코드를 짜보아요....
+merged = pd.merge(merged_df,df4, on='국가명')
+merged2 = pd.merge(merged,df5, on='국가명')
+merged2 = merged2[['무역수지','국내총생산','1인당 총생산','환율','대출금리']]
 
-features = processed_data.drop('국가명', axis=1)
+#
+merged2.isnull().sum()
+merged2 = merged2.dropna()
+out = merged2[merged2['대출금리']=='-'].index
+merged2 = merged2.drop(out)
 
-kmeans = KMeans(n_clusters=3)
-kmeans.fit(features)
-processed_data['군집'] = kmeans.labels_
-processed_data.info()
-grouped = processed_data.groupby('군집')
-processed_data['군집'].value_counts()
+
+merged2= merged2.replace(',', '', regex=True).astype(float) #쉼표제거, float형으로 변환
+merged2.corr(method='pearson')
+
+scaler = preprocessing.MinMaxScaler()
+merged2 = scaler.fit_transform(merged2)
+
+# K = 3으로 클러스터링
+estimator = KMeans(n_clusters = 3)
+
+# 클러스터링 생성
+cluster = estimator.fit_predict(merged2)
+
+'''
+# 군집이 균형적으로 안됨ㅠ
+# 4쿼터..뭐냐 이거 무튼 이거해서 해보자
+qt = QuantileTransformer()
+cc_scaled = qt.fit_transform(sc)
+'''
+
+# 클러스터링
+kmeans = KMeans(n_clusters=3, random_state=10)
+clusters = kmeans.fit(cc_scaled)
+
+
+
+clusters = linkage(merged2, method='average') # 방법 세가지 있는데 
+print(clusters)
+
+# 4. 클러스터링 자르기
+from scipy.cluster.hierarchy import fcluster # 클러스터 자르기 도구 
+import numpy as np # 클러스터 빈도수 
+
+# 클러스터 자르기
+cut_cluster = fcluster(clusters, t=12, criterion='maxclust')
+
+# 클러스터 빈도수
+unique, counts = np.unique(cut_cluster, return_counts=True)
+print(unique, counts) # [1 2 3] [140   1   1] 
+
+df3['cluster'] = cut_cluster
+df3
+
+plt.figure(figsize = (25, 10))
+dendrogram(cut_cluster)
+plt.show() 
