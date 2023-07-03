@@ -276,7 +276,6 @@ cc['cluster'] = clusters.labels_
 # 계층적 군집 분석
 
 # 필요한 라이브러리 다운
-from sklearn.datasets import load_iris # dataset
 import pandas as pd # DataFrame
 from scipy.cluster.hierarchy import linkage, dendrogram # 군집분석 tool
 import matplotlib.pyplot as plt # 산점도 시각화 
@@ -345,57 +344,62 @@ df5 = df5[['대출금리','국가명']]
 
 merged = pd.merge(merged_df,df4, on='국가명')
 merged2 = pd.merge(merged,df5, on='국가명')
-merged2 = merged2[['무역수지','국내총생산','1인당 총생산','환율','대출금리']]
+merged2 = merged2[['국가명','무역수지','국내총생산','1인당 총생산','환율','대출금리']]
 
-#
+
 merged2.isnull().sum()
 merged2 = merged2.dropna()
 out = merged2[merged2['대출금리']=='-'].index
 merged2 = merged2.drop(out)
 
-
-merged2= merged2.replace(',', '', regex=True).astype(float) #쉼표제거, float형으로 변환
-merged2.corr(method='pearson')
+merged3 = merged2[['무역수지','국내총생산','1인당 총생산','환율','대출금리']]
+merged3= merged3.replace(',', '', regex=True).astype(float) #쉼표제거, float형으로 변환
+# merged3.corr(method='pearson')
 
 scaler = preprocessing.MinMaxScaler()
-merged2 = scaler.fit_transform(merged2)
+merged3 = scaler.fit_transform(merged3)
 
-# K = 3으로 클러스터링
-estimator = KMeans(n_clusters = 3)
+# best cluster 찾기
+import matplotlib.pyplot as plt # 시각화 
 
-# 클러스터링 생성
-cluster = estimator.fit_predict(merged2)
+size = range(1, 11) # k값 범위
+inertia = [] # 응집도 (중심점과 포인트 간 거리 제곱합)
 
-'''
-# 군집이 균형적으로 안됨ㅠ
-# 4쿼터..뭐냐 이거 무튼 이거해서 해보자
-qt = QuantileTransformer()
-cc_scaled = qt.fit_transform(sc)
-'''
+for k in size : 
+    obj = KMeans(n_clusters = k) 
+    model = obj.fit(merged3)
+    inertia.append(model.inertia_) 
+
+print(inertia)
+
+
+# 3. best cluster 찾기 
+plt.plot(size, inertia, '-o')
+plt.xticks(size)
+plt.show()
+
 
 # 클러스터링
-kmeans = KMeans(n_clusters=3, random_state=10)
-clusters = kmeans.fit(cc_scaled)
+kmeans = KMeans(n_clusters=7, random_state=10)
+clusters = kmeans.fit(merged3)
 
+# 군집 결과를 원본 데이터에 추가
+merged2['cluster'] = clusters.labels_
+merged2['cluster'].value_counts()
+'''
+0    35
+1    17
+3     6
+6     3
+4     3
+5     1
+2     1
+'''
 
+merged_first = merged2[merged2['cluster'] == 0]
+merged_second = merged2[merged2['cluster'] == 1]
+merged_third = merged2[merged2['cluster'] == 3]
 
-clusters = linkage(merged2, method='average') # 방법 세가지 있는데 
-print(clusters)
-
-# 4. 클러스터링 자르기
-from scipy.cluster.hierarchy import fcluster # 클러스터 자르기 도구 
-import numpy as np # 클러스터 빈도수 
-
-# 클러스터 자르기
-cut_cluster = fcluster(clusters, t=12, criterion='maxclust')
-
-# 클러스터 빈도수
-unique, counts = np.unique(cut_cluster, return_counts=True)
-print(unique, counts) # [1 2 3] [140   1   1] 
-
-df3['cluster'] = cut_cluster
-df3
-
-plt.figure(figsize = (25, 10))
-dendrogram(cut_cluster)
-plt.show() 
+merged_first.to_csv(r'C:\ITWILL\trade_project\data\군집1.csv', encoding='ANSI', index=False)
+merged_second.to_csv(r'C:\ITWILL\trade_project\data\군집2.csv', encoding='ANSI', index=False)
+merged_third.to_csv(r'C:\ITWILL\trade_project\data\군집3.csv', encoding='ANSI', index=False)
