@@ -342,20 +342,23 @@ df5['대출금리'] = df5['2021.2']
 df5 = df5[['대출금리','국가명']]
 
 
-merged = pd.merge(merged_df,df4, on='국가명')
+len(merged_df) # 144
+merged = pd.merge(df3,df4, on='국가명')
+len(merged) # 108
 merged2 = pd.merge(merged,df5, on='국가명')
-merged2 = merged2[['국가명','무역수지','국내총생산','1인당 총생산','환율','대출금리']]
+merged2 = merged2[['국가명','무역수지','국내총생산','1인당 총생산','환율','대출금리']] 
+len(merged2) # 78
 
 
-merged2.isnull().sum()
-merged2 = merged2.dropna()
-out = merged2[merged2['대출금리']=='-'].index
-merged2 = merged2.drop(out)
+merged.isnull().sum()
+merged = merged.dropna()
+# out = merged2[merged2['대출금리']=='-'].index
+# merged2 = merged2.drop(out)
 
-merged3 = merged2[['무역수지','국내총생산','1인당 총생산','환율','대출금리']]
+merged3 = merged[['수출건수','수출금액','수입건수','수입금액','무역수지','국내총생산','1인당 총생산','환율']]
 merged3= merged3.replace(',', '', regex=True).astype(float) #쉼표제거, float형으로 변환
-# merged3.corr(method='pearson')
-
+merged3.corr(method='pearson')
+merged.info()
 scaler = preprocessing.MinMaxScaler()
 merged3 = scaler.fit_transform(merged3)
 
@@ -380,12 +383,43 @@ plt.show()
 
 
 # 클러스터링
-kmeans = KMeans(n_clusters=7, random_state=10)
+kmeans = KMeans(n_clusters=5, random_state=10)
 clusters = kmeans.fit(merged3)
 
 # 군집 결과를 원본 데이터에 추가
-merged2['cluster'] = clusters.labels_
-merged2['cluster'].value_counts()
+merged['cluster'] = clusters.labels_
+merged['cluster'].value_counts()
+
+merged = merged[['수출건수','수출금액','수입건수','수입금액','무역수지','국내총생산','1인당 총생산','환율']]
+merged = merged.replace(',', '', regex=True).astype(float)
+
+def re_float(a) :
+    a = a.str.replace(',', '').astype('float')
+    return a
+
+merged['수출건수'] = re_float(merged['수출건수'])
+merged['수출금액'] = re_float(merged['수출금액'])
+merged['수입건수'] = re_float(merged['수입건수'])
+merged['수입금액'] = re_float(merged['수입금액'])
+merged['무역수지'] = re_float(merged['무역수지'])
+
+merged.info()
+
+
+merged.groupby('cluster').mean()
+merged.to_csv(r'C:\ITWILL\trade_project\data\merged.csv', encoding='ANSI')
+
+cluster1 = merged[merged['cluster']==0]
+cluster1 = merged[merged['무역수지'] >= merged['무역수지'].quantile(.75)]
+cluster1.info()
+cluster1.to_csv(r'C:\ITWILL\trade_project\data\cluster0.csv', encoding='ANSI')
+
+cluster2 = merged[merged['cluster']==2]
+cluster2 = merged[merged['무역수지'] >= merged['무역수지'].quantile(.75)]
+cluster2.info()
+cluster2.to_csv(r'C:\ITWILL\trade_project\data\cluster2.csv', encoding='ANSI')
+
+
 '''
 0    35
 1    17
@@ -403,3 +437,54 @@ merged_third = merged2[merged2['cluster'] == 3]
 merged_first.to_csv(r'C:\ITWILL\trade_project\data\군집1.csv', encoding='ANSI', index=False)
 merged_second.to_csv(r'C:\ITWILL\trade_project\data\군집2.csv', encoding='ANSI', index=False)
 merged_third.to_csv(r'C:\ITWILL\trade_project\data\군집3.csv', encoding='ANSI', index=False)
+
+
+# 그룹별 무역수지 성장률 top3 추출
+group_1 = pd.read_csv(r'data\cluster1.csv', encoding='utf-8')
+group_2 = pd.read_csv(r'data\cluster2.csv', encoding='utf-8')
+group_3 = pd.read_csv(r'data\cluster3.csv', encoding='utf-8')
+
+data_frames = []
+
+for year in [2017,2018,2019,2020,2021,2022] :
+    file_path = f"data/국가별수출입실적/국가별수출입실적{year}.csv"
+    df = pd.read_csv(file_path, encoding='ANSI')
+    data_frames.append(df)
+
+df_2017 = data_frames[0][['국가명','무역수지']]
+df_2018 = data_frames[1][['국가명','무역수지']]
+df_2019 = data_frames[2][['국가명','무역수지']]
+df_2020 = data_frames[3][['국가명','무역수지']]
+df_2021 = data_frames[4][['국가명','무역수지']]
+df_2022 = data_frames[5][['국가명','무역수지']]
+df_2017['2017'] = df_2017['무역수지']
+df_2017 = df_2017.drop('무역수지', axis=1)
+df_2018.rename(columns={'무역수지':'2018'},inplace=True)
+df_2019.rename(columns={'무역수지':'2019'},inplace=True)
+df_2020.rename(columns={'무역수지':'2020'},inplace=True)
+df_2021.rename(columns={'무역수지':'2021'},inplace=True)
+df_2022.rename(columns={'무역수지':'2022'},inplace=True)
+
+m1 = pd.merge(df_2017,df_2018, on='국가명')
+m2 = pd.merge(m1,df_2019, on='국가명')
+m3 = pd.merge(m2,df_2020, on='국가명')
+m4 = pd.merge(m3,df_2021, on='국가명')
+trade_balance = pd.merge(m4,df_2022, on='국가명')
+
+trade_balance.info()
+trade_balance.isnull().sum()
+
+def re_float(years) :
+    years = years.str.replace(',', '').astype('float')
+    return years
+
+for i in range(2017,2023) :
+    trade_balance.i = re_float(trade_balance.i)
+
+
+trade_balance['2017'] = re_int(trade_balance['2017'])
+trade_balance['2018'] = re_int(trade_balance['2018'])
+trade_balance['2019'] = re_int(trade_balance['2019'])
+trade_balance['2020'] = re_int(trade_balance['2020'])
+trade_balance['2021'] = re_int(trade_balance['2021'])
+trade_balance['2022'] = re_int(trade_balance['2022'])
