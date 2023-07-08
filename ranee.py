@@ -341,24 +341,21 @@ df5['국가명'] = df5['국가별']
 df5['대출금리'] = df5['2021.2']
 df5 = df5[['대출금리','국가명']]
 
-
-len(merged_df) # 144
 merged = pd.merge(df3,df4, on='국가명')
 len(merged) # 108
 merged2 = pd.merge(merged,df5, on='국가명')
 merged2 = merged2[['국가명','무역수지','국내총생산','1인당 총생산','환율','대출금리']] 
-len(merged2) # 78
-
+len(merged2) # 78, data개수손실이 커 대출금리는 사용X
 
 merged.isnull().sum()
 merged = merged.dropna()
-# out = merged2[merged2['대출금리']=='-'].index
-# merged2 = merged2.drop(out)
 
 merged3 = merged[['수출건수','수출금액','수입건수','수입금액','무역수지','국내총생산','1인당 총생산','환율']]
 merged3= merged3.replace(',', '', regex=True).astype(float) #쉼표제거, float형으로 변환
 merged3.corr(method='pearson')
 merged.info()
+
+# 자료 정규화
 scaler = preprocessing.MinMaxScaler()
 merged3 = scaler.fit_transform(merged3)
 
